@@ -377,6 +377,12 @@ class SupportStrTest extends TestCase
         $this->assertEquals($expected, Str::containsAll($haystack, $needles, $ignoreCase));
     }
 
+    #[DataProvider('strDoesntContainProvider')]
+    public function testStrDoesntContain($haystack, $needles, $expected, $ignoreCase = false)
+    {
+        $this->assertEquals($expected, Str::doesntContain($haystack, $needles, $ignoreCase));
+    }
+
     public function testConvertCase()
     {
         // Upper Case Conversion
@@ -398,6 +404,14 @@ class SupportStrTest extends TestCase
         // Unsupported Mode
         $this->expectException(\ValueError::class);
         Str::convertCase('Hello', -1);
+    }
+
+    public function testDedup()
+    {
+        $this->assertSame(' laravel php framework ', Str::deduplicate(' laravel   php  framework '));
+        $this->assertSame('what', Str::deduplicate('whaaat', 'a'));
+        $this->assertSame('/some/odd/path/', Str::deduplicate('/some//odd//path/', '/'));
+        $this->assertSame('ムだム', Str::deduplicate('ムだだム', 'だ'));
     }
 
     public function testParseCallback()
@@ -521,6 +535,7 @@ class SupportStrTest extends TestCase
     public function testIsUrl()
     {
         $this->assertTrue(Str::isUrl('https://laravel.com'));
+        $this->assertTrue(Str::isUrl('http://localhost'));
         $this->assertFalse(Str::isUrl('invalid url'));
     }
 
@@ -596,15 +611,22 @@ class SupportStrTest extends TestCase
     {
         $this->assertSame('Laravel is...', Str::limit('Laravel is a free, open source PHP web application framework.', 10));
         $this->assertSame('这是一...', Str::limit('这是一段中文', 6));
+        $this->assertSame('Laravel is a...', Str::limit('Laravel is a free, open source PHP web application framework.', 15, preserveWords: true));
 
         $string = 'The PHP framework for web artisans.';
         $this->assertSame('The PHP...', Str::limit($string, 7));
+        $this->assertSame('The PHP...', Str::limit($string, 10, preserveWords: true));
         $this->assertSame('The PHP', Str::limit($string, 7, ''));
+        $this->assertSame('The PHP', Str::limit($string, 10, '', true));
         $this->assertSame('The PHP framework for web artisans.', Str::limit($string, 100));
+        $this->assertSame('The PHP framework for web artisans.', Str::limit($string, 100, preserveWords: true));
+        $this->assertSame('The PHP framework...', Str::limit($string, 20, preserveWords: true));
 
         $nonAsciiString = '这是一段中文';
         $this->assertSame('这是一...', Str::limit($nonAsciiString, 6));
+        $this->assertSame('这是一...', Str::limit($nonAsciiString, 6, preserveWords: true));
         $this->assertSame('这是一', Str::limit($nonAsciiString, 6, ''));
+        $this->assertSame('这是一', Str::limit($nonAsciiString, 6, '', true));
     }
 
     public function testLength()
@@ -846,6 +868,16 @@ class SupportStrTest extends TestCase
         );
 
         $this->assertSame("\xE9", Str::trim(" \xE9 "));
+
+        $trimDefaultChars = [' ', "\n", "\r", "\t", "\v", "\0"];
+
+        foreach ($trimDefaultChars as $char) {
+            $this->assertSame('', Str::trim(" {$char} "));
+            $this->assertSame(trim(" {$char} "), Str::trim(" {$char} "));
+
+            $this->assertSame('foo bar', Str::trim("{$char} foo bar {$char}"));
+            $this->assertSame(trim("{$char} foo bar {$char}"), Str::trim("{$char} foo bar {$char}"));
+        }
     }
 
     public function testLtrim()
@@ -866,6 +898,16 @@ class SupportStrTest extends TestCase
             ')
         );
         $this->assertSame("\xE9 ", Str::ltrim(" \xE9 "));
+
+        $ltrimDefaultChars = [' ', "\n", "\r", "\t", "\v", "\0"];
+
+        foreach ($ltrimDefaultChars as $char) {
+            $this->assertSame('', Str::ltrim(" {$char} "));
+            $this->assertSame(ltrim(" {$char} "), Str::ltrim(" {$char} "));
+
+            $this->assertSame("foo bar {$char}", Str::ltrim("{$char} foo bar {$char}"));
+            $this->assertSame(ltrim("{$char} foo bar {$char}"), Str::ltrim("{$char} foo bar {$char}"));
+        }
     }
 
     public function testRtrim()
@@ -887,6 +929,16 @@ class SupportStrTest extends TestCase
         );
 
         $this->assertSame(" \xE9", Str::rtrim(" \xE9 "));
+
+        $rtrimDefaultChars = [' ', "\n", "\r", "\t", "\v", "\0"];
+
+        foreach ($rtrimDefaultChars as $char) {
+            $this->assertSame('', Str::rtrim(" {$char} "));
+            $this->assertSame(rtrim(" {$char} "), Str::rtrim(" {$char} "));
+
+            $this->assertSame("{$char} foo bar", Str::rtrim("{$char} foo bar {$char}"));
+            $this->assertSame(rtrim("{$char} foo bar {$char}"), Str::rtrim("{$char} foo bar {$char}"));
+        }
     }
 
     public function testSquish()
@@ -1101,6 +1153,7 @@ class SupportStrTest extends TestCase
     {
         $this->assertInstanceOf(UuidInterface::class, Str::uuid());
         $this->assertInstanceOf(UuidInterface::class, Str::orderedUuid());
+        $this->assertInstanceOf(UuidInterface::class, Str::uuid7());
     }
 
     public function testAsciiNull()
@@ -1238,6 +1291,13 @@ class SupportStrTest extends TestCase
         ];
     }
 
+    public static function strDoesntContainProvider()
+    {
+        return [
+            ['Tar', 'ylo', true, true],
+        ];
+    }
+
     public function testMarkdown()
     {
         $this->assertSame("<p><em>hello world</em></p>\n", Str::markdown('*hello world*'));
@@ -1354,7 +1414,7 @@ class SupportStrTest extends TestCase
     {
         Str::createUuidsUsingSequence([
             0 => ($zeroth = Str::uuid()),
-            1 => ($first = Str::uuid()),
+            1 => ($first = Str::uuid7()),
             // just generate a random one here...
             3 => ($third = Str::uuid()),
             // continue to generate random uuids...

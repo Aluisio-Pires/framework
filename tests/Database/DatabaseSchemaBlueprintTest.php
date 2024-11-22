@@ -10,6 +10,7 @@ use Illuminate\Database\Schema\Grammars\MySqlGrammar;
 use Illuminate\Database\Schema\Grammars\PostgresGrammar;
 use Illuminate\Database\Schema\Grammars\SQLiteGrammar;
 use Illuminate\Database\Schema\Grammars\SqlServerGrammar;
+use Illuminate\Tests\Database\Fixtures\Models\User;
 use Mockery as m;
 use PHPUnit\Framework\TestCase;
 
@@ -120,6 +121,7 @@ class DatabaseSchemaBlueprintTest extends TestCase
         $this->assertEquals(['alter table "users" add column "created" timestamp(0) without time zone not null default CURRENT_TIMESTAMP'], $blueprint->toSql($connection, new PostgresGrammar));
 
         $blueprint = clone $base;
+        $connection->shouldReceive('getServerVersion')->andReturn('3.35');
         $this->assertEquals(['alter table "users" add column "created" datetime not null default CURRENT_TIMESTAMP'], $blueprint->toSql($connection, new SQLiteGrammar));
 
         $blueprint = clone $base;
@@ -141,6 +143,7 @@ class DatabaseSchemaBlueprintTest extends TestCase
         $this->assertEquals(['alter table "users" add column "created" timestamp(0) without time zone not null default CURRENT_TIMESTAMP'], $blueprint->toSql($connection, new PostgresGrammar));
 
         $blueprint = clone $base;
+        $connection->shouldReceive('getServerVersion')->andReturn('3.35');
         $this->assertEquals(['alter table "users" add column "created" datetime not null default CURRENT_TIMESTAMP'], $blueprint->toSql($connection, new SQLiteGrammar));
 
         $blueprint = clone $base;
@@ -251,6 +254,7 @@ class DatabaseSchemaBlueprintTest extends TestCase
         $this->assertEquals(['alter table "users" drop column "foo"'], $blueprint->toSql($connection, new PostgresGrammar));
 
         $blueprint = clone $base;
+        $connection->shouldReceive('getServerVersion')->andReturn('3.35');
         $this->assertEquals(['alter table "users" drop column "foo"'], $blueprint->toSql($connection, new SQLiteGrammar));
 
         $blueprint = clone $base;
@@ -287,7 +291,8 @@ class DatabaseSchemaBlueprintTest extends TestCase
         $blueprint = clone $base;
 
         $this->assertEquals([
-            'alter table `comments` add `commentable_type` varchar(255) not null, add `commentable_id` bigint unsigned not null',
+            'alter table `comments` add `commentable_type` varchar(255) not null',
+            'alter table `comments` add `commentable_id` bigint unsigned not null',
             'alter table `comments` add index `comments_commentable_type_commentable_id_index`(`commentable_type`, `commentable_id`)',
         ], $blueprint->toSql($connection, new MySqlGrammar));
     }
@@ -303,7 +308,8 @@ class DatabaseSchemaBlueprintTest extends TestCase
         $blueprint = clone $base;
 
         $this->assertEquals([
-            'alter table `comments` add `commentable_type` varchar(255) null, add `commentable_id` bigint unsigned null',
+            'alter table `comments` add `commentable_type` varchar(255) null',
+            'alter table `comments` add `commentable_id` bigint unsigned null',
             'alter table `comments` add index `comments_commentable_type_commentable_id_index`(`commentable_type`, `commentable_id`)',
         ], $blueprint->toSql($connection, new MySqlGrammar));
     }
@@ -321,7 +327,8 @@ class DatabaseSchemaBlueprintTest extends TestCase
         $blueprint = clone $base;
 
         $this->assertEquals([
-            'alter table `comments` add `commentable_type` varchar(255) not null, add `commentable_id` char(36) not null',
+            'alter table `comments` add `commentable_type` varchar(255) not null',
+            'alter table `comments` add `commentable_id` char(36) not null',
             'alter table `comments` add index `comments_commentable_type_commentable_id_index`(`commentable_type`, `commentable_id`)',
         ], $blueprint->toSql($connection, new MySqlGrammar));
     }
@@ -339,7 +346,8 @@ class DatabaseSchemaBlueprintTest extends TestCase
         $blueprint = clone $base;
 
         $this->assertEquals([
-            'alter table `comments` add `commentable_type` varchar(255) null, add `commentable_id` char(36) null',
+            'alter table `comments` add `commentable_type` varchar(255) null',
+            'alter table `comments` add `commentable_id` char(36) null',
             'alter table `comments` add index `comments_commentable_type_commentable_id_index`(`commentable_type`, `commentable_id`)',
         ], $blueprint->toSql($connection, new MySqlGrammar));
     }
@@ -357,7 +365,8 @@ class DatabaseSchemaBlueprintTest extends TestCase
         $blueprint = clone $base;
 
         $this->assertEquals([
-            'alter table `comments` add `commentable_type` varchar(255) not null, add `commentable_id` char(26) not null',
+            'alter table `comments` add `commentable_type` varchar(255) not null',
+            'alter table `comments` add `commentable_id` char(26) not null',
             'alter table `comments` add index `comments_commentable_type_commentable_id_index`(`commentable_type`, `commentable_id`)',
         ], $blueprint->toSql($connection, new MySqlGrammar));
     }
@@ -375,7 +384,8 @@ class DatabaseSchemaBlueprintTest extends TestCase
         $blueprint = clone $base;
 
         $this->assertEquals([
-            'alter table `comments` add `commentable_type` varchar(255) null, add `commentable_id` char(26) null',
+            'alter table `comments` add `commentable_type` varchar(255) null',
+            'alter table `comments` add `commentable_id` char(26) null',
             'alter table `comments` add index `comments_commentable_type_commentable_id_index`(`commentable_type`, `commentable_id`)',
         ], $blueprint->toSql($connection, new MySqlGrammar));
     }
@@ -433,6 +443,38 @@ class DatabaseSchemaBlueprintTest extends TestCase
         $this->assertEquals([
             'alter table `posts` add `eloquent_model_ulid_stub_id` char(26) not null',
         ], $blueprint->toSql($connection, new MySqlGrammar()));
+    }
+
+    public function testGenerateRelationshipConstrainedColumn()
+    {
+        $base = new Blueprint('posts', function ($table) {
+            $table->foreignIdFor('Illuminate\Foundation\Auth\User')->constrained();
+        });
+
+        $connection = m::mock(Connection::class);
+
+        $blueprint = clone $base;
+
+        $this->assertEquals([
+            'alter table `posts` add `user_id` bigint unsigned not null',
+            'alter table `posts` add constraint `posts_user_id_foreign` foreign key (`user_id`) references `users` (`id`)',
+        ], $blueprint->toSql($connection, new MySqlGrammar));
+    }
+
+    public function testGenerateRelationshipForModelWithNonStandardPrimaryKeyName()
+    {
+        $base = new Blueprint('posts', function ($table) {
+            $table->foreignIdFor(User::class)->constrained();
+        });
+
+        $connection = m::mock(Connection::class);
+
+        $blueprint = clone $base;
+
+        $this->assertEquals([
+            'alter table `posts` add `user_internal_id` bigint unsigned not null',
+            'alter table `posts` add constraint `posts_user_internal_id_foreign` foreign key (`user_internal_id`) references `users` (`internal_id`)',
+        ], $blueprint->toSql($connection, new MySqlGrammar));
     }
 
     public function testDropRelationshipColumnWithIncrementalModel()
@@ -515,6 +557,7 @@ class DatabaseSchemaBlueprintTest extends TestCase
         ], $blueprint->toSql($connection, new MySqlGrammar));
 
         $blueprint = clone $base;
+        $connection->shouldReceive('getServerVersion')->andReturn('3.35');
         $this->assertEquals([
             'alter table "posts" add column "note" text not null',
         ], $blueprint->toSql($connection, new SQLiteGrammar));
@@ -544,6 +587,7 @@ class DatabaseSchemaBlueprintTest extends TestCase
         ], $blueprint->toSql($connection, new MySqlGrammar));
 
         $blueprint = clone $base;
+        $connection->shouldReceive('getServerVersion')->andReturn('3.35');
         $this->assertEquals([
             'alter table "posts" add column "note" text',
         ], $blueprint->toSql($connection, new SQLiteGrammar));
@@ -556,6 +600,36 @@ class DatabaseSchemaBlueprintTest extends TestCase
         $blueprint = clone $base;
         $this->assertEquals([
             'alter table "posts" add "note" nvarchar(255) null',
+        ], $blueprint->toSql($connection, new SqlServerGrammar));
+    }
+
+    public function testRawColumn()
+    {
+        $base = new Blueprint('posts', function ($table) {
+            $table->rawColumn('legacy_boolean', 'INT(1)')->nullable();
+        });
+
+        $connection = m::mock(Connection::class);
+
+        $blueprint = clone $base;
+        $this->assertEquals([
+            'alter table `posts` add `legacy_boolean` INT(1) null',
+        ], $blueprint->toSql($connection, new MySqlGrammar));
+
+        $blueprint = clone $base;
+        $connection->shouldReceive('getServerVersion')->andReturn('3.35');
+        $this->assertEquals([
+            'alter table "posts" add column "legacy_boolean" INT(1)',
+        ], $blueprint->toSql($connection, new SQLiteGrammar));
+
+        $blueprint = clone $base;
+        $this->assertEquals([
+            'alter table "posts" add column "legacy_boolean" INT(1) null',
+        ], $blueprint->toSql($connection, new PostgresGrammar));
+
+        $blueprint = clone $base;
+        $this->assertEquals([
+            'alter table "posts" add "legacy_boolean" INT(1) null',
         ], $blueprint->toSql($connection, new SqlServerGrammar));
     }
 

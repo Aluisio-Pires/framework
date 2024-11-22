@@ -12,6 +12,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\ConditionallyLoadsAttributes;
 use Illuminate\Http\Resources\DelegatesToResource;
+use JsonException;
 use JsonSerializable;
 
 class JsonResource implements ArrayAccess, JsonSerializable, Responsable, UrlRoutable
@@ -42,6 +43,13 @@ class JsonResource implements ArrayAccess, JsonSerializable, Responsable, UrlRou
     public $additional = [];
 
     /**
+     * The instance level wrapper configured for the resource.
+     *
+     * @var string|null
+     */
+    public $wrapper = null;
+
+    /**
      * The "data" wrapper that should be applied.
      *
      * @var string|null
@@ -57,6 +65,8 @@ class JsonResource implements ArrayAccess, JsonSerializable, Responsable, UrlRou
     public function __construct($resource)
     {
         $this->resource = $resource;
+
+        $this->withWrapper(static::$wrap);
     }
 
     /**
@@ -144,10 +154,10 @@ class JsonResource implements ArrayAccess, JsonSerializable, Responsable, UrlRou
      */
     public function toJson($options = 0)
     {
-        $json = json_encode($this->jsonSerialize(), $options);
-
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            throw JsonEncodingException::forResource($this, json_last_error_msg());
+        try {
+            $json = json_encode($this->jsonSerialize(), $options | JSON_THROW_ON_ERROR);
+        } catch (JsonException $e) {
+            throw JsonEncodingException::forResource($this, $e->getMessage());
         }
 
         return $json;
@@ -197,6 +207,29 @@ class JsonResource implements ArrayAccess, JsonSerializable, Responsable, UrlRou
     public function withResponse(Request $request, JsonResponse $response)
     {
         //
+    }
+
+    /**
+     * Set the string that should wrap the outer-most resource array.
+     *
+     * @param  string|null  $value
+     * @return $this
+     */
+    public function withWrapper(?string $value)
+    {
+        $this->wrapper = $value;
+
+        return $this;
+    }
+
+    /**
+     * Disable wrapping of the outer-most resource array.
+     *
+     * @return $this
+     */
+    public function withoutWrapper()
+    {
+        return $this->withWrapper(null);
     }
 
     /**

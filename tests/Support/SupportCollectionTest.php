@@ -1379,7 +1379,7 @@ class SupportCollectionTest extends TestCase
     public function testDiffUsingWithCollection($collection)
     {
         $c = new $collection(['en_GB', 'fr', 'HR']);
-        // demonstrate that diffKeys won't support case insensitivity
+        // demonstrate that diff won't support case insensitivity
         $this->assertEquals(['en_GB', 'fr', 'HR'], $c->diff(new $collection(['en_gb', 'hr']))->values()->toArray());
         // allow for case insensitive difference
         $this->assertEquals(['fr'], $c->diffUsing(new $collection(['en_gb', 'hr']), 'strcasecmp')->values()->toArray());
@@ -1723,6 +1723,20 @@ class SupportCollectionTest extends TestCase
     }
 
     #[DataProvider('collectionClassProvider')]
+    public function testCollapseWithKeys($collection)
+    {
+        $data = new $collection([[1 => 'a'], [3 => 'c'], [2 => 'b'], 'drop']);
+        $this->assertEquals([1 => 'a', 3 => 'c', 2 => 'b'], $data->collapseWithKeys()->all());
+    }
+
+    #[DataProvider('collectionClassProvider')]
+    public function testCollapseWithKeysOnNestedCollections($collection)
+    {
+        $data = new $collection([new $collection(['a' => '1a', 'b' => '1b']), new $collection(['b' => '2b', 'c' => '2c']), 'drop']);
+        $this->assertEquals(['a' => '1a', 'b' => '2b', 'c' => '2c'], $data->collapseWithKeys()->all());
+    }
+
+    #[DataProvider('collectionClassProvider')]
     public function testJoin($collection)
     {
         $this->assertSame('a, b, c', (new $collection(['a', 'b', 'c']))->join(', '));
@@ -1986,6 +2000,26 @@ class SupportCollectionTest extends TestCase
         $this->assertEquals($data->pluck('item')->toArray(), $expected);
 
         setlocale(LC_ALL, $defaultLocale);
+    }
+
+    #[DataProvider('collectionClassProvider')]
+    public function testNaturalSortByManyWithNull($collection)
+    {
+        $itemFoo = new \stdClass();
+        $itemFoo->first = 'f';
+        $itemFoo->second = null;
+        $itemBar = new \stdClass();
+        $itemBar->first = 'f';
+        $itemBar->second = 's';
+
+        $data = new $collection([$itemFoo, $itemBar]);
+        $data = $data->sortBy([
+            ['first', 'desc'],
+            ['second', 'desc'],
+        ], SORT_NATURAL);
+
+        $this->assertEquals($itemBar, $data->first());
+        $this->assertEquals($itemFoo, $data->skip(1)->first());
     }
 
     #[DataProvider('collectionClassProvider')]
